@@ -1,6 +1,7 @@
 package qoi
 
 import (
+	"bufio"
 	"errors"
 	"image"
 	"image/color"
@@ -21,7 +22,30 @@ const (
 	headerSize    = 14
 )
 
-// TODO: init & register the image format or reader or something?
+func init() {
+	image.RegisterFormat("qoi", "qoif", Decode, DecodeConfig)
+}
+
+func DecodeConfig(r io.Reader) (image.Config, error) {
+	var headerBytes [headerSize]byte
+	// new buffer to read bytes from r
+	br := bufio.NewReader(r)
+
+	for i := 0; i < headerSize; i++ {
+		b, err := br.ReadByte()
+		if err != nil {
+			return image.Config{}, err
+		}
+		headerBytes[i] = b
+	}
+
+	h, err := readHeader(headerBytes)
+	if err != nil {
+		return image.Config{}, err
+	}
+
+	return h.AsConfig(), nil
+}
 
 func Decode(r io.Reader) (image.Image, error) {
 	// Read entire reader into byte slice

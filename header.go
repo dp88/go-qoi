@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"image"
+	"image/color"
 )
 
 type header struct {
@@ -34,4 +36,12 @@ func readHeader(data [14]byte) (header, error) {
 	}
 
 	return h, nil
+}
+
+func (h header) AsConfig() image.Config {
+	return image.Config{
+		ColorModel: color.NRGBAModel,
+		Width:      int(h.width),
+		Height:     int(h.height),
+	}
 }
