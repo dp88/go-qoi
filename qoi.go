@@ -2,6 +2,7 @@ package qoi
 
 import (
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"image"
 	"image/color"
@@ -109,8 +110,7 @@ func Decode(r io.Reader) (image.Image, error) {
 				}
 
 				// Add the pixel to the color table
-				hashTableIndex := ((int(pixel.R) * 3) + (int(pixel.G) * 5) + (int(pixel.B) * 7) + (int(pixel.A) * 11)) % hashTableSize
-				colorTable[hashTableIndex] = pixel
+				colorTable[hashTableIndex(pixel)] = pixel
 			}
 
 			img.Set(x, y, pixel)  // Set the pixel in the image
@@ -119,4 +119,48 @@ func Decode(r io.Reader) (image.Image, error) {
 	}
 
 	return img, nil
+}
+
+func Encode(w io.Writer, img image.Image) error {
+	bw := bufio.NewWriter(w)
+
+	h := header{
+		magic:      [4]byte{'q', 'o', 'i', 'f'},
+		width:      uint32(img.Bounds().Dx()),
+		height:     uint32(img.Bounds().Dy()),
+		channels:   4,
+		colorspace: 0,
+	}
+
+	if err := binary.Write(bw, binary.BigEndian, h); err != nil {
+		return err
+	}
+
+	// colorTable := [hashTableSize]color.NRGBA{}
+	// previousPixel := color.NRGBA{0, 0, 0, 255}
+
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			pixel := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+
+			// Most naïve encoding possible
+			bw.WriteByte(op_rgba)
+			bw.WriteByte(pixel.R)
+			bw.WriteByte(pixel.G)
+			bw.WriteByte(pixel.B)
+			bw.WriteByte(pixel.A)
+		}
+	}
+
+	// End of QOI image
+	for i := 0; i < 7; i++ {
+		bw.WriteByte(0)
+	}
+	bw.WriteByte(0x01)
+
+	return bw.Flush()
+}
+
+func hashTableIndex(c color.NRGBA) int {
+	return ((int(c.R) * 3) + (int(c.G) * 5) + (int(c.B) * 7) + (int(c.A) * 11)) % hashTableSize
 }
