@@ -7,6 +7,8 @@ import (
 	"image"
 	"image/color"
 	"io"
+
+	"github.com/dp88/go-qoi/colortable"
 )
 
 const (
@@ -19,8 +21,7 @@ const (
 	op_run      = 0b11000000 // Begin a run of pixels
 	op_key_mask = 0b11000000 // 2-bit mask for the operation key
 
-	hashTableSize = 64
-	headerSize    = 14
+	headerSize = 14
 )
 
 func init() {
@@ -41,40 +42,30 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 	}
 
 	h, err := readHeader(headerBytes)
-	if err != nil {
-		return image.Config{}, err
-	}
-
-	return h.AsConfig(), nil
+	return h.AsConfig(), err
 }
 
 func Decode(r io.Reader) (image.Image, error) {
 	// Read entire reader into byte slice
-	data, err := io.ReadAll(r)
+	br := bufio.NewReader(r)
+	cfg, err := DecodeConfig(br)
 	if err != nil {
 		return nil, err
 	}
 
-	h, err := readHeader([14]byte(data[:headerSize]))
-	if err != nil {
-		return nil, err
-	}
-
-	img := image.NewNRGBA(image.Rect(0, 0, int(h.width), int(h.height)))
-	colorTable := [hashTableSize]color.NRGBA{}
+	img := image.NewNRGBA(image.Rect(0, 0, cfg.Width, cfg.Height))
+	lookup := colortable.ColorTable{}
 
 	previousPixel := color.NRGBA{0, 0, 0, 255}
 	run := 0
-	i := headerSize
 
 	nextByte := func() byte {
-		b := data[i]
-		i++
+		b, _ := br.ReadByte()
 		return b
 	}
 
-	for y := 0; y < int(h.height); y++ {
-		for x := 0; x < int(h.width); x++ {
+	for y := 0; y < int(cfg.Height); y++ {
+		for x := 0; x < int(cfg.Width); x++ {
 			pixel := previousPixel // Default to previous pixel
 
 			if run > 0 { // Continue the run
@@ -91,7 +82,7 @@ func Decode(r io.Reader) (image.Image, error) {
 						pixel.A = nextByte()
 					}
 				} else if (opKey & op_key_mask) == op_index { // Color table lookup
-					pixel = colorTable[(int(opKey) & ^op_key_mask)]
+					pixel = lookup.Get(int(opKey) & ^op_key_mask)
 				} else if (opKey & op_key_mask) == op_diff { // Simple diff from previous pixel (alpha unchanged)
 					pixel.R += ((opKey >> 4) & 0b00000011) - 2
 					pixel.G += ((opKey >> 2) & 0b00000011) - 2
@@ -110,7 +101,7 @@ func Decode(r io.Reader) (image.Image, error) {
 				}
 
 				// Add the pixel to the color table
-				colorTable[hashTableIndex(pixel)] = pixel
+				lookup.Add(pixel)
 			}
 
 			img.Set(x, y, pixel)  // Set the pixel in the image
@@ -127,17 +118,17 @@ func Encode(w io.Writer, img image.Image) error {
 	bw.WriteString("qoif")
 
 	h := header{
-		width:      uint32(img.Bounds().Dx()),
-		height:     uint32(img.Bounds().Dy()),
-		channels:   4,
-		colorspace: 0,
+		Width:      uint32(img.Bounds().Dx()),
+		Height:     uint32(img.Bounds().Dy()),
+		Channels:   4,
+		Colorspace: 0,
 	}
 
 	if err := binary.Write(bw, binary.BigEndian, h); err != nil {
 		return err
 	}
 
-	colorTable := [hashTableSize]color.NRGBA{}
+	lookup := colortable.ColorTable{}
 	previousPixel := color.NRGBA{0, 0, 0, 255}
 	run := 0
 
@@ -166,12 +157,11 @@ func Encode(w io.Writer, img image.Image) error {
 				}
 
 				// Check if the pixel is in the color table
-				tableIndex := hashTableIndex(pixel)
-				if colorTable[tableIndex] == pixel {
-					bw.WriteByte(op_index | byte(tableIndex))
+				if lookup.Contains(pixel) {
+					bw.WriteByte(op_index | byte(colortable.IndexFor(pixel)))
 				} else {
 					// Write the pixel to the color table
-					colorTable[tableIndex] = pixel
+					lookup.Add(pixel)
 
 					if pixel.A == previousPixel.A {
 						vr := int(pixel.R) - int(previousPixel.R)
@@ -217,8 +207,4 @@ func Encode(w io.Writer, img image.Image) error {
 	bw.WriteByte(0x01)
 
 	return bw.Flush()
-}
-
-func hashTableIndex(c color.NRGBA) int {
-	return ((int(c.R) * 3) + (int(c.G) * 5) + (int(c.B) * 7) + (int(c.A) * 11)) % hashTableSize
 }

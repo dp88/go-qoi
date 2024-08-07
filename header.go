@@ -1,39 +1,43 @@
 package qoi
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"image"
 	"image/color"
 )
 
 type header struct {
-	width      uint32
-	height     uint32
-	channels   uint8
-	colorspace uint8
+	Width      uint32
+	Height     uint32
+	Channels   uint8
+	Colorspace uint8
 }
 
-func readHeader(data [14]byte) (header, error) {
-	var h header
+func readHeader(data [14]byte) (h header, err error) {
+	if err = binary.Read(bytes.NewReader(data[4:]), binary.BigEndian, &h); err != nil {
+		return h, err
+	}
 
 	// Check for the magic string
 	if string(data[:4]) != "qoif" {
 		return h, errors.New("qoi: invalid magic string")
 	}
 
-	// Read the width and height
-	h.width = uint32(data[4])<<24 | uint32(data[5])<<16 | uint32(data[6])<<8 | uint32(data[7])
-	h.height = uint32(data[8])<<24 | uint32(data[9])<<16 | uint32(data[10])<<8 | uint32(data[11])
-
-	if h.width == 0 || h.height == 0 {
+	// Check for valid dimensions
+	if h.Width == 0 || h.Height == 0 {
 		return h, errors.New("qoi: invalid image dimensions")
 	}
 
-	h.channels = data[12]
-	h.colorspace = data[13]
-
-	if h.channels != 3 && h.channels != 4 {
+	// Check for valid number of channels
+	if h.Channels != 3 && h.Channels != 4 {
 		return h, errors.New("qoi: invalid number of channels")
+	}
+
+	// Check for valid colorspace
+	if h.Colorspace > 1 {
+		return h, errors.New("qoi: invalid colorspace")
 	}
 
 	return h, nil
@@ -42,7 +46,7 @@ func readHeader(data [14]byte) (header, error) {
 func (h header) AsConfig() image.Config {
 	return image.Config{
 		ColorModel: color.NRGBAModel,
-		Width:      int(h.width),
-		Height:     int(h.height),
+		Width:      int(h.Width),
+		Height:     int(h.Height),
 	}
 }
