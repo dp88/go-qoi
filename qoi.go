@@ -137,7 +137,7 @@ func Encode(w io.Writer, img image.Image) error {
 		return err
 	}
 
-	// colorTable := [hashTableSize]color.NRGBA{}
+	colorTable := [hashTableSize]color.NRGBA{}
 	previousPixel := color.NRGBA{0, 0, 0, 255}
 	run := 0
 
@@ -165,11 +165,20 @@ func Encode(w io.Writer, img image.Image) error {
 					flushRun()
 				}
 
-				bw.WriteByte(op_rgba)
-				bw.WriteByte(pixel.R)
-				bw.WriteByte(pixel.G)
-				bw.WriteByte(pixel.B)
-				bw.WriteByte(pixel.A)
+				// Check if the pixel is in the color table
+				tableIndex := hashTableIndex(pixel)
+				if colorTable[tableIndex] == pixel {
+					bw.WriteByte(op_index | byte(tableIndex))
+				} else {
+					// Write the pixel to the color table
+					colorTable[tableIndex] = pixel
+
+					bw.WriteByte(op_rgba)
+					bw.WriteByte(pixel.R)
+					bw.WriteByte(pixel.G)
+					bw.WriteByte(pixel.B)
+					bw.WriteByte(pixel.A)
+				}
 
 				previousPixel = pixel
 			}
