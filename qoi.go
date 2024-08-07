@@ -124,6 +124,8 @@ func Decode(r io.Reader) (image.Image, error) {
 func Encode(w io.Writer, img image.Image) error {
 	bw := bufio.NewWriter(w)
 
+	bw.WriteString("qoif")
+
 	h := header{
 		width:      uint32(img.Bounds().Dx()),
 		height:     uint32(img.Bounds().Dy()),

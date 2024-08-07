@@ -1,6 +1,9 @@
 package qoi
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"image"
 	_ "image/png"
 	"os"
@@ -39,6 +42,25 @@ func getTestFiles() []string {
 	}
 
 	return filePairs
+}
+
+func checkPixels(p, q image.Image) error {
+	if p.Bounds().Dx() != q.Bounds().Dx() || p.Bounds().Dy() != q.Bounds().Dy() {
+		return errors.New("mismatched dimensions")
+	}
+
+	for y := 0; y < p.Bounds().Dy(); y++ {
+		for x := 0; x < p.Bounds().Dx(); x++ {
+			r1, g1, b1, a1 := p.At(x, y).RGBA()
+			r2, g2, b2, a2 := q.At(x, y).RGBA()
+
+			if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+				return fmt.Errorf("mismatched pixel at (%d, %d): PNG(%d, %d, %d, %d) QOI(%d, %d, %d, %d)", x, y, r1, g1, b1, a1, r2, g2, b2, a2)
+			}
+		}
+	}
+
+	return nil
 }
 
 func TestDecodeConfig(t *testing.T) {
@@ -97,17 +119,46 @@ func TestDecode(t *testing.T) {
 			t.Fatalf("failed to decode image for %s.qoi: %v", file, err)
 		}
 
-		for y := 0; y < imgPNG.Bounds().Dy(); y++ {
-			for x := 0; x < imgPNG.Bounds().Dx(); x++ {
-				r1, g1, b1, a1 := imgPNG.At(x, y).RGBA()
-				r2, g2, b2, a2 := imgQOI.At(x, y).RGBA()
+		err = checkPixels(imgPNG, imgQOI)
+		if err != nil {
+			t.Errorf("mismatched pixels for %s: %v", file, err)
+		} else {
+			t.Log("pixels match for", file)
+		}
+	}
+}
 
-				if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
-					t.Errorf("mismatched pixel at (%d, %d) for %s: PNG(%d, %d, %d, %d) QOI(%d, %d, %d, %d)", x, y, file, r1, g1, b1, a1, r2, g2, b2, a2)
-				}
-			}
+func TestEncode(t *testing.T) {
+	for _, file := range getTestFiles() {
+		fPNG, err := os.Open(testDir + "/" + file + ".png")
+		if err != nil {
+			t.Fatalf("failed to open file %s: %v", file, err)
+		}
+		defer fPNG.Close()
+
+		imgPNG, _, err := image.Decode(fPNG)
+		if err != nil {
+			t.Fatalf("failed to decode image for %s.png: %v", file, err)
 		}
 
-		t.Log("pixels match for", file)
+		// Encode imgPNG to QOI format and write to a buffer
+		var buf bytes.Buffer
+		err = Encode(&buf, imgPNG)
+		if err != nil {
+			t.Fatalf("failed to encode image to QOI for %s: %v", file, err)
+		}
+
+		// Decode the QOI image from the buffer
+		imgQOI, err := Decode(&buf)
+		if err != nil {
+			t.Fatalf("failed to decode QOI image for %s: %v", file, err)
+		}
+
+		err = checkPixels(imgPNG, imgQOI)
+		if err != nil {
+			t.Errorf("mismatched pixels for %s: %v", file, err)
+		} else {
+			t.Log("pixels match for", file)
+		}
 	}
 }
