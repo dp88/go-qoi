@@ -178,10 +178,18 @@ func Encode(w io.Writer, img image.Image) error {
 						vg := int(pixel.G) - int(previousPixel.G)
 						vb := int(pixel.B) - int(previousPixel.B)
 
+						vgr := vr - vg
+						vgb := vb - vg
+
 						if vr > -3 && vr < 2 &&
 							vg > -3 && vg < 2 &&
 							vb > -3 && vb < 2 {
 							bw.WriteByte(op_diff | byte((vr+2)<<4|(vg+2)<<2|(vb+2)<<0))
+						} else if vgr > -9 && vgr < 8 &&
+							vg > -33 && vg < 32 &&
+							vgb > -9 && vgb < 8 {
+							bw.WriteByte(op_luma | byte(vg+32))
+							bw.WriteByte(byte(vgr+8)<<4 | byte(vgb+8)<<0)
 						} else {
 							bw.WriteByte(op_rgb)
 							bw.WriteByte(pixel.R)
