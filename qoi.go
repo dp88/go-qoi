@@ -138,18 +138,41 @@ func Encode(w io.Writer, img image.Image) error {
 	}
 
 	// colorTable := [hashTableSize]color.NRGBA{}
-	// previousPixel := color.NRGBA{0, 0, 0, 255}
+	previousPixel := color.NRGBA{0, 0, 0, 255}
+	run := 0
 
-	for y := 0; y < img.Bounds().Dy(); y++ {
-		for x := 0; x < img.Bounds().Dx(); x++ {
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+
+	flushRun := func() {
+		bw.WriteByte(op_run | byte(run-1)) // -1 because a run value of 0 is a single pixel
+		run = 0
+	}
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
 			pixel := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
 
-			// Most naïve encoding possible
-			bw.WriteByte(op_rgba)
-			bw.WriteByte(pixel.R)
-			bw.WriteByte(pixel.G)
-			bw.WriteByte(pixel.B)
-			bw.WriteByte(pixel.A)
+			// Check if we're in a run of pixels
+			if pixel == previousPixel {
+				run++
+
+				if run == 62 || (x == width-1 && y == height-1) { // End of a run
+					flushRun()
+				}
+			} else { // Just regular pixel data
+				if run > 0 {
+					flushRun()
+				}
+
+				bw.WriteByte(op_rgba)
+				bw.WriteByte(pixel.R)
+				bw.WriteByte(pixel.G)
+				bw.WriteByte(pixel.B)
+				bw.WriteByte(pixel.A)
+
+				previousPixel = pixel
+			}
 		}
 	}
 
