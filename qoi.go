@@ -173,11 +173,18 @@ func Encode(w io.Writer, img image.Image) error {
 					// Write the pixel to the color table
 					colorTable[tableIndex] = pixel
 
-					bw.WriteByte(op_rgba)
-					bw.WriteByte(pixel.R)
-					bw.WriteByte(pixel.G)
-					bw.WriteByte(pixel.B)
-					bw.WriteByte(pixel.A)
+					if pixel.A == previousPixel.A {
+						bw.WriteByte(op_rgb)
+						bw.WriteByte(pixel.R)
+						bw.WriteByte(pixel.G)
+						bw.WriteByte(pixel.B)
+					} else {
+						bw.WriteByte(op_rgba)
+						bw.WriteByte(pixel.R)
+						bw.WriteByte(pixel.G)
+						bw.WriteByte(pixel.B)
+						bw.WriteByte(pixel.A)
+					}
 				}
 
 				previousPixel = pixel
