@@ -125,7 +125,6 @@ func Encode(w io.Writer, img image.Image) error {
 	bw := bufio.NewWriter(w)
 
 	h := header{
-		magic:      [4]byte{'q', 'o', 'i', 'f'},
 		width:      uint32(img.Bounds().Dx()),
 		height:     uint32(img.Bounds().Dy()),
 		channels:   4,
